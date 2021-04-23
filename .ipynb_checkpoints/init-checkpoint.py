@@ -1,7 +1,6 @@
 import os
 import sqlite3
 
-os.system('rm users.txt')
 os.system('rm users.db')
 os.system('touch users.db')
 os.system('rm message.db')
