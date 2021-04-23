@@ -2,6 +2,8 @@ from flask import Flask, make_response, request
 import time
 import random
 import json
+import sqlite3
+import threading
 app = Flask(__name__)
 
 from threading import Thread
@@ -20,11 +22,8 @@ def asy(f):
 def watcher(A):
     while True:
         sleep(3)
-        #A.debug()
+        A.debug()
         A.update()
-
-
-
 
 @app.route('/')
 def index():
@@ -66,8 +65,9 @@ def send():
     au = request.form.get('auth')
     tun = request.form.get('target')
     cont = request.form.get('content') # last chat id
-    if un != None and au != None and us.get_auth(un) == au:
-        ms.add_msg(un, tun, time.strftime('%Y-%m-%d %H:%M:%S'), cont)
+    
+    if un != None and au != None and us.get_auth(un) == au and us.users.get(tun) != None:
+        ms.add_msg(un, tun, cont, time.strftime('%Y-%m-%d %H:%M:%S'))
         #return success
         return make_response("send success", 200)
     else:
@@ -78,34 +78,23 @@ def send():
 def search():
     # search for history
     return "search not support"
-'''
-@app.route('/content', method=['POST'])
+
+@app.route('/content', methods=['POST'])
 def get_content():
     # get normal content
     global us, ms
-    un = request.form.get('user')
-    au = request.form.get('au')
+    un = request.form.get('username')
+    au = request.form.get('auth')
     lid = request.form.get('lid') # last chat id
+    print(un, au, lid)
     if un != None and au != None and us.get_auth(un) == au:
         ret = ms.get_msgs(un, lid)  # return new message
         # make chat list to json
-        return make_response("nothing", 200)
+        return make_response(json.dumps(ret), 200)
     else:
         #error message
         return make_response("content error", 401)
-@app.route('/friend', method=['POST'])
-def friend():
-    global us, ms
-    un = request.form.get('user')
-    au = request.form.get('au')
-    lid = request.form.get('lid') # last chat id
-    if un != None and au != None and us.get_auth(un) == au: 
-        ret = ms.get_b(un)
-        # make friend list to json with new message number
-        return make_response("nothing", 200)
-    else:
-        return make_response("friend error", 401) 
-'''        
+
 def get_Auth():
     return str(random.randint(0, 10**8))
 
@@ -231,27 +220,86 @@ class User_pool:
             return None
         else:
             return self.users[un].auth
-
-class Message_pool:
+        
+class RWLock:
+    def __init__(self):
+        self.rlock = threading.Lock()
+        self.rnum = 0
+        self.wlock = threading.Lock()
+    def rAcquire(self):
+        self.rlock.acquire()
+        self.rnum += 1
+        if self.rnum == 1:
+            self.wlock.acquire()
+        self.rlock.release()
+    def rRelease(self):
+        self.rlock.acquire()
+        self.rnum -= 1
+        if self.rnum == 0:
+            self.wlock.release()
+        self.rlock.release()
+    def wAcquire(self):
+        self.wlock.acquire()
+    def wRelease(self):
+        self.wlock.release()
+        
+class User_pool_db:
     def __init__(self, file_name):
         self.source = file_name
-    def add_msg(self, a, b, t, cont):
-        pass
+    
+        
+class Message_pool:
+
+        
+    def __init__(self, file_name):
+        self.source = file_name
+        self.conn = sqlite3.connect(self.source, check_same_thread=False)
+        self.rw = RWLock()
+        #self.mesList = []
+    def add_msg(self, a, b, cont, t):
+        #conn = sqlite3.connect(self.source)
+        self.rw.wAcquire()
+
+        cur = self.conn.cursor()
+        cur.execute("SELECT tick FROM message ORDER BY tick DESC")
+        last = cur.fetchone()
+        if last != None:
+            tick = last[0] + 1
+        else:
+            tick = 1
+        cur.execute("INSERT INTO message VALUES ('%s', '%s', '%s', '%s', '%f')" % (a, b, cont, t, tick))
+        cur.close()
+        self.conn.commit()
+
+        self.rw.wRelease()
     def get_msgs(self, a, st):
-        pass
-    def get_b(self, a):
-        pass
+        self.rw.rAcquire()
+        
+        cur = self.conn.cursor()
+        cur.execute("SELECT * FROM message WHERE name1 = ? OR name2 = ? AND tick > ?", (a, a, st))
+        ret = cur.fetchall()
+        cur.close()
+        
+        self.rw.rRelease()
+        return ret
     def update(self):
         pass
     def debug(self):
-        pass
+        self.rw.rAcquire()
+        
+        cur = self.conn.cursor()
+        for row in cur.execute("SELECT * FROM message ORDER BY tick"):
+            print(row)
+        cur.close()
+
+        self.rw.rRelease()
 
 us = None
 ms = None
 def init():
     global us, ms
     us = User_pool('users.txt')
-    ms = Message_pool('message.txt')
+    ms = Message_pool('message.db')
     
 
 if __name__ == '__main__':
@@ -260,4 +308,5 @@ if __name__ == '__main__':
     #global us, ms
     watcher(us)
     watcher(ms)
+    
     app.run(host='0.0.0.0', port=80, debug = True) 
