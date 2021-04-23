@@ -9,7 +9,7 @@ os.system('touch message.db')
 
 conn= sqlite3.connect('users.db')
 cur = conn.cursor()
-cur.execute("CREATE TABLE user(name char(20), password char(20), nickname char(20))")
+cur.execute("CREATE TABLE user(name char(20), password char(20), nickname char(20), auth int, stat int)")
 cur.close()
 conn.commit()
 conn.close()
