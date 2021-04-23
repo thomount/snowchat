@@ -128,10 +128,12 @@ class User:
         return self
     def login(self):
         self.state = True
+        print(self.uname, 'login')
         self.auth = get_Auth()
         return self.auth
     def logout(self):
         self.state = False
+        print(self.uname, 'logout')
         self.auth = None
     def change_nname(self, nname):
         self.clean = False
@@ -257,6 +259,7 @@ class Message_pool:
         self.rw = RWLock()
         #self.mesList = []
     def add_msg(self, a, b, cont, t):
+        print("%s talk to %s at %s: %s" % (a, b, t, cont))
         #conn = sqlite3.connect(self.source)
         self.rw.wAcquire()
 
@@ -276,7 +279,7 @@ class Message_pool:
         self.rw.rAcquire()
         
         cur = self.conn.cursor()
-        cur.execute("SELECT * FROM message WHERE name1 = ? OR name2 = ? AND tick > ?", (a, a, st))
+        cur.execute("SELECT * FROM message WHERE tick > ? AND (name1 = ? OR name2 = ?)", (st, a, a))
         ret = cur.fetchall()
         cur.close()
         
@@ -306,7 +309,7 @@ if __name__ == '__main__':
     init()
     #test1()
     #global us, ms
-    watcher(us)
-    watcher(ms)
+    #watcher(us)
+    #watcher(ms)
     
     app.run(host='0.0.0.0', port=80, debug = True) 
